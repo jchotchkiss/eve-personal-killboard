@@ -57,14 +57,22 @@ export async function POST(request: NextRequest) {
             killmail_hash: km.zkb.hash,
             killmail_time: km.killmail_time,
             solar_system_id: km.solar_system_id,
+            solar_system_name: km.solar_system_name || 'Unknown',
+            region_id: km.region_id || null,
+            region_name: km.region_name || null,
             victim_character_id: km.victim?.character_id || null,
-            victim_character_name: km.victim?.character_name || null,
+            victim_character_name: km.victim?.character_name || 'Unknown',
+            victim_corporation_id: km.victim?.corporation_id || null,
             victim_ship_type_id: km.victim?.ship_type_id || null,
+            victim_ship_name: km.victim?.ship_name || null,
             total_value: km.zkb.totalValue || 0,
-            zkb_points: km.zkb.points || 0,
+            fitted_value: km.zkb.fittedValue || 0,
+            destroyed_value: km.zkb.destroyedValue || 0,
+            dropped_value: km.zkb.droppedValue || 0,
             is_solo: km.zkb.solo || false,
-            is_awox: km.zkb.awox || false,
+            is_npc_kill: km.zkb.npc || false,
             attacker_count: km.attackers?.length || 0,
+            zkb_points: km.zkb.points || 0,
             raw_killmail: km
           })
           .select()
@@ -73,7 +81,7 @@ export async function POST(request: NextRequest) {
           if (error.code === '23505') {
             skipped++
           } else {
-            console.error('Insert error:', error)
+            console.error(`Insert error for killmail ${km.killmail_id}:`, error)
             errors++
           }
         } else {
