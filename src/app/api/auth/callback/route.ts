@@ -54,8 +54,12 @@ export async function GET(request: NextRequest) {
         onConflict: 'eve_character_id'
       })
 
-      if (error) {
-      console.error('Database error:', error)
+    if (error) {
+      console.error('Database error details:', {
+        code: error.code,
+        message: error.message,
+        details: error.details,
+      })
       return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}/login?error=database_error`)
     }
 
