@@ -10,23 +10,14 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // Create Supabase client with SERVICE ROLE KEY (bypasses RLS)
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
     const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
-    console.log('Supabase URL length:', supabaseUrl?.length)
-    console.log('Supabase Key length:', supabaseServiceRoleKey?.length)
-    console.log('Supabase URL starts with:', supabaseUrl?.substring(0, 20))
-    console.log('Supabase Key starts with:', supabaseServiceRoleKey?.substring(0, 20))
-
     if (!supabaseUrl || !supabaseServiceRoleKey) {
-      console.error('Missing Supabase config')
       return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}/login?error=config_error`)
     }
 
-    console.log('Creating Supabase client...')
     const supabase = createClient(supabaseUrl, supabaseServiceRoleKey)
-    console.log('Supabase client created successfully')
 
     // Exchange code for tokens
     const tokenResponse = await fetch('https://login.eveonline.com/v2/oauth/token', {
@@ -49,40 +40,52 @@ export async function GET(request: NextRequest) {
 
     const characterData = await verifyResponse.json()
 
-    // Store user in database
     console.log('Attempting to upsert user:', characterData.CharacterID)
     
-    const { error, data } = await supabase
+    // Try INSERT with ON CONFLICT
+    const { error } = await supabase
       .from('users')
-      .upsert({
+      .insert({
         eve_character_id: characterData.CharacterID,
         eve_character_name: characterData.CharacterName,
         access_token: tokens.access_token,
         refresh_token: tokens.refresh_token,
         token_expires_at: new Date(Date.now() + tokens.expires_in * 1000).toISOString()
-      }, {
-        onConflict: 'eve_character_id'
       })
+      .select()
 
-    console.log('Upsert response - data:', data)
-    console.log('Upsert response - error:', error)
-
-    if (error) {
-      console.error('Database error - Full object:', JSON.stringify(error, null, 2))
-      console.error('Database error - Type:', typeof error)
-      console.error('Database error - Keys:', Object.keys(error))
+    if (error && error.code !== '23505') {
+      // 23505 is duplicate key error - that's OK
+      console.error('Database insert error:', error)
       return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}/login?error=database_error`)
     }
 
-    console.log('User upserted successfully:', characterData.CharacterID)
+    if (error && error.code === '23505') {
+      // User exists, update instead
+      console.log('User exists, updating instead')
+      const { error: updateError } = await supabase
+        .from('users')
+        .update({
+          eve_character_name: characterData.CharacterName,
+          access_token: tokens.access_token,
+          refresh_token: tokens.refresh_token,
+          token_expires_at: new Date(Date.now() + tokens.expires_in * 1000).toISOString()
+        })
+        .eq('eve_character_id', characterData.CharacterID)
+
+      if (updateError) {
+        console.error('Database update error:', updateError)
+        return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}/login?error=database_error`)
+      }
+    }
+
+    console.log('User saved successfully:', characterData.CharacterID)
 
     // Redirect to dashboard
     return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}/dashboard`)
 
   } catch (error) {
     console.error('Auth error:', error)
-    console.error('Error type:', typeof error)
-    console.error('Error keys:', Object.keys(error || {}))
     return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}/login?error=auth_failed`)
   }
 }
