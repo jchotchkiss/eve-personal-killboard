@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/sync-killmails",
+      "schedule": "0 */6 * * *"
+    }
+  ]
+}
