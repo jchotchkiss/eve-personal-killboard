@@ -21,7 +21,6 @@ export async function POST(request: NextRequest) {
 
     const supabase = createClient(supabaseUrl, supabaseServiceRoleKey)
 
-    // Fetch from ZKillboard
     console.log(`Fetching killmails for character ${characterId}...`)
     const zkbResponse = await fetch(
       `https://zkillboard.com/api/characterID/${characterId}/`,
@@ -43,7 +42,6 @@ export async function POST(request: NextRequest) {
     const zkbKillmails = await zkbResponse.json()
     console.log(`Received ${zkbKillmails.length} killmails from ZKillboard`)
 
-    // Store in database
     let inserted = 0
     let skipped = 0
     let errors = 0
@@ -55,7 +53,7 @@ export async function POST(request: NextRequest) {
           .insert({
             killmail_id: km.killmail_id,
             killmail_hash: km.zkb.hash,
-            killmail_time: km.killmail_time,
+            killmail_time: km.killmail_time || new Date().toISOString(), // Fallback to now
             solar_system_id: km.solar_system_id,
             solar_system_name: km.solar_system_name || 'Unknown',
             region_id: km.region_id || null,
