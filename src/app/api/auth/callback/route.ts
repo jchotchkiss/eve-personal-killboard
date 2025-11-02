@@ -37,11 +37,11 @@ export async function GET(request: NextRequest) {
     // Use Supabase RPC with correct headers
     const upsertUrl = `${supabaseUrl}/rest/v1/rpc/upsert_user`
 
-    const upsertResponse = await fetch(upsertUrl, {
+        const upsertResponse = await fetch(upsertUrl, {
       method: 'POST',
       headers: {
-        'apikey': supabaseServiceRoleKey,  // ← KEY CHANGE: Use 'apikey' header
-        'Authorization': `Bearer ${supabaseServiceRoleKey}`,  // Also include Bearer
+        'apikey': supabaseServiceRoleKey || '',
+        'Authorization': `Bearer ${supabaseServiceRoleKey}`,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
