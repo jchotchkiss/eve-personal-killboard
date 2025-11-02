@@ -50,9 +50,11 @@ export async function GET(request: NextRequest) {
         access_token: tokens.access_token,
         refresh_token: tokens.refresh_token,
         token_expires_at: new Date(Date.now() + tokens.expires_in * 1000).toISOString()
+      }, {
+        onConflict: 'eve_character_id'
       })
 
-    if (error) {
+      if (error) {
       console.error('Database error:', error)
       return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}/login?error=database_error`)
     }
