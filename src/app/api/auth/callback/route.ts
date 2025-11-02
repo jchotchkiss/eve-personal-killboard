@@ -10,15 +10,15 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // Create Supabase client fresh each time
+    // Create Supabase client with SERVICE ROLE KEY (bypasses RLS)
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
-    if (!supabaseUrl || !supabaseAnonKey) {
+    if (!supabaseUrl || !supabaseServiceRoleKey) {
       return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}/login?error=config_error`)
     }
 
-    const supabase = createClient(supabaseUrl, supabaseAnonKey)
+    const supabase = createClient(supabaseUrl, supabaseServiceRoleKey)
 
     // Exchange code for tokens
     const tokenResponse = await fetch('https://login.eveonline.com/v2/oauth/token', {
@@ -57,14 +57,15 @@ export async function GET(request: NextRequest) {
       })
 
     if (error) {
-      console.error('DATABASE ERROR - Full error object:', error)
-      console.error('DATABASE ERROR - Code:', error.code)
-      console.error('DATABASE ERROR - Message:', error.message)
-      console.error('DATABASE ERROR - Details:', error.details)
-      // TEMPORARY: Continue anyway to see if this is the issue
-      console.log('Continuing despite database error...')
-      // return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}/login?error=database_error`)
+      console.error('Database error:', {
+        code: error.code,
+        message: error.message,
+        details: error.details
+      })
+      return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}/login?error=database_error`)
     }
+
+    console.log('User upserted successfully:', characterData.CharacterID)
 
     // Redirect to dashboard
     return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}/dashboard`)
