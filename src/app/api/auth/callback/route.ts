@@ -29,23 +29,20 @@ export async function GET(request: NextRequest) {
     })
 
     const characterData = await verifyResponse.json()
-    console.log('Character authenticated:', characterData.CharacterName, '(', characterData.CharacterID, ')')
+    console.log('Character authenticated:', characterData.CharacterName)
 
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
     const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
-    console.log('Supabase URL:', supabaseUrl?.substring(0, 30), '...')
-    console.log('Service key length:', supabaseServiceRoleKey?.length)
-
-    // Use Supabase REST API with proper error handling
+    // Use Supabase RPC with correct headers
     const upsertUrl = `${supabaseUrl}/rest/v1/rpc/upsert_user`
 
     const upsertResponse = await fetch(upsertUrl, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${supabaseServiceRoleKey}`,
-        'Content-Type': 'application/json',
-        'Prefer': 'return=representation'
+        'apikey': supabaseServiceRoleKey,  // ← KEY CHANGE: Use 'apikey' header
+        'Authorization': `Bearer ${supabaseServiceRoleKey}`,  // Also include Bearer
+        'Content-Type': 'application/json'
       },
       body: JSON.stringify({
         p_eve_character_id: characterData.CharacterID,
@@ -57,8 +54,6 @@ export async function GET(request: NextRequest) {
     })
 
     console.log('Upsert response status:', upsertResponse.status)
-    const contentType = upsertResponse.headers.get('content-type')
-    console.log('Content type:', contentType)
 
     if (!upsertResponse.ok) {
       const responseText = await upsertResponse.text()
@@ -67,7 +62,7 @@ export async function GET(request: NextRequest) {
     }
 
     const upsertData = await upsertResponse.json()
-    console.log('Upsert successful:', upsertData)
+    console.log('Upsert successful')
 
     return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}/dashboard`)
 
