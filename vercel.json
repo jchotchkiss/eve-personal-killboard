@@ -2,7 +2,11 @@
   "crons": [
     {
       "path": "/api/cron/sync-killmails",
-      "schedule": "*/1 * * * *"
+      "schedule": "47 4 * * *"
+    },
+    {
+      "path": "/api/cron/sync-killmails",
+      "schedule": "45 16 * * *"
     }
   ]
 }
