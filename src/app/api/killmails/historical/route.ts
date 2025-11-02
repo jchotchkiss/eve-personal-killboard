@@ -6,19 +6,13 @@ const systemCache = new Map<number, string>()
 
 async function getShipTypeName(shipTypeId: number | null): Promise<string> {
   if (!shipTypeId) return 'Unknown'
-  if (shipTypeCache.has(shipTypeId)) {
-    return shipTypeCache.get(shipTypeId)!
-  }
+  if (shipTypeCache.has(shipTypeId)) return shipTypeCache.get(shipTypeId)!
 
   try {
     const response = await fetch(
       `https://esi.eveonline.com/latest/universe/types/${shipTypeId}/`
     )
-    if (!response.ok) {
-      console.error(`ESI ship lookup failed: ${response.status}`)
-      return 'Unknown'
-    }
-
+    if (!response.ok) return 'Unknown'
     const data = await response.json()
     shipTypeCache.set(shipTypeId, data.name)
     return data.name
@@ -30,25 +24,35 @@ async function getShipTypeName(shipTypeId: number | null): Promise<string> {
 
 async function getSystemName(systemId: number | null): Promise<string> {
   if (!systemId) return 'Unknown'
-  if (systemCache.has(systemId)) {
-    return systemCache.get(systemId)!
-  }
+  if (systemCache.has(systemId)) return systemCache.get(systemId)!
 
   try {
     const response = await fetch(
       `https://esi.eveonline.com/latest/universe/systems/${systemId}/`
     )
-    if (!response.ok) {
-      console.error(`ESI system lookup failed: ${response.status}`)
-      return 'Unknown'
-    }
-
+    if (!response.ok) return 'Unknown'
     const data = await response.json()
     systemCache.set(systemId, data.name)
     return data.name
   } catch (error) {
     console.error(`Error fetching system ${systemId}:`, error)
     return 'Unknown'
+  }
+}
+
+async function getFullKillmail(killmailId: number, hash: string): Promise<any> {
+  try {
+    const response = await fetch(
+      `https://esi.eveonline.com/latest/killmails/${killmailId}/${hash}/`
+    )
+    if (!response.ok) {
+      console.error(`ESI killmail fetch failed: ${response.status}`)
+      return null
+    }
+    return await response.json()
+  } catch (error) {
+    console.error(`Error fetching killmail ${killmailId}:`, error)
+    return null
   }
 }
 
@@ -83,7 +87,6 @@ export async function POST(request: NextRequest) {
     )
 
     if (!zkbResponse.ok) {
-      console.error(`ZKB API error: ${zkbResponse.status}`)
       return NextResponse.json(
         { error: `ZKB API error: ${zkbResponse.status}` },
         { status: zkbResponse.status }
@@ -91,44 +94,50 @@ export async function POST(request: NextRequest) {
     }
 
     const zkbKillmails = await zkbResponse.json()
-    console.log(`Received ${zkbKillmails.length} killmails from ZKillboard`)
+    console.log(`Received ${zkbKillmails.length} killmail IDs from ZKillboard`)
 
     let inserted = 0
     let skipped = 0
     let errors = 0
 
-    for (const km of zkbKillmails) {
+    for (const zkbKm of zkbKillmails) {
       try {
-        // Fetch ship and system names from ESI
-        const shipName = await getShipTypeName(km.victim?.ship_type_id)
-        const systemName = await getSystemName(km.solar_system_id)
+        // Fetch FULL killmail from ESI
+        const fullKm = await getFullKillmail(zkbKm.killmail_id, zkbKm.zkb.hash)
+        if (!fullKm) {
+          console.error(`Failed to fetch full killmail ${zkbKm.killmail_id}`)
+          errors++
+          continue
+        }
 
-        console.log(`Processing killmail ${km.killmail_id}: ship=${shipName}, system=${systemName}`)
+        // Fetch ship and system names
+        const shipName = await getShipTypeName(fullKm.victim?.ship_type_id)
+        const systemName = await getSystemName(fullKm.solar_system_id)
 
         const { error } = await supabase
           .from('killmails')
           .insert({
-            killmail_id: km.killmail_id,
-            killmail_hash: km.zkb.hash,
-            killmail_time: km.killmail_time || new Date().toISOString(),
-            solar_system_id: km.solar_system_id || 30000142,
+            killmail_id: zkbKm.killmail_id,
+            killmail_hash: zkbKm.zkb.hash,
+            killmail_time: fullKm.killmail_time,
+            solar_system_id: fullKm.solar_system_id,
             solar_system_name: systemName,
-            region_id: km.region_id || null,
-            region_name: km.region_name || null,
-            victim_character_id: km.victim?.character_id || null,
-            victim_character_name: km.victim?.character_name || 'Unknown',
-            victim_corporation_id: km.victim?.corporation_id || null,
-            victim_ship_type_id: km.victim?.ship_type_id || null,
+            region_id: null,
+            region_name: null,
+            victim_character_id: fullKm.victim?.character_id || null,
+            victim_character_name: fullKm.victim?.character_name || 'Unknown',
+            victim_corporation_id: fullKm.victim?.corporation_id || null,
+            victim_ship_type_id: fullKm.victim?.ship_type_id || null,
             victim_ship_name: shipName,
-            total_value: km.zkb.totalValue || 0,
-            fitted_value: km.zkb.fittedValue || 0,
-            destroyed_value: km.zkb.destroyedValue || 0,
-            dropped_value: km.zkb.droppedValue || 0,
-            is_solo: km.zkb.solo || false,
-            is_npc_kill: km.zkb.npc || false,
-            attacker_count: km.attackers?.length || 0,
-            zkb_points: km.zkb.points || 0,
-            raw_killmail: km
+            total_value: zkbKm.zkb.totalValue || 0,
+            fitted_value: zkbKm.zkb.fittedValue || 0,
+            destroyed_value: zkbKm.zkb.destroyedValue || 0,
+            dropped_value: zkbKm.zkb.droppedValue || 0,
+            is_solo: zkbKm.zkb.solo || false,
+            is_npc_kill: zkbKm.zkb.npc || false,
+            attacker_count: fullKm.attackers?.length || 0,
+            zkb_points: zkbKm.zkb.points || 0,
+            raw_killmail: fullKm
           })
           .select()
 
@@ -136,7 +145,7 @@ export async function POST(request: NextRequest) {
           if (error.code === '23505') {
             skipped++
           } else {
-            console.error(`Insert error for killmail ${km.killmail_id}:`, error)
+            console.error(`Insert error for killmail ${zkbKm.killmail_id}:`, error)
             errors++
           }
         } else {
