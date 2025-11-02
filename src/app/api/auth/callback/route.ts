@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
@@ -10,15 +9,6 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-
-    if (!supabaseUrl || !supabaseServiceRoleKey) {
-      return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}/login?error=config_error`)
-    }
-
-    const supabase = createClient(supabaseUrl, supabaseServiceRoleKey)
-
     // Exchange code for tokens
     const tokenResponse = await fetch('https://login.eveonline.com/v2/oauth/token', {
       method: 'POST',
@@ -39,49 +29,67 @@ export async function GET(request: NextRequest) {
     })
 
     const characterData = await verifyResponse.json()
+    console.log('Attempting to upsert user via REST API:', characterData.CharacterID)
 
-    console.log('Attempting to upsert user:', characterData.CharacterID)
-    
-    // Try INSERT with ON CONFLICT
-    const { error } = await supabase
-      .from('users')
-      .insert({
-        eve_character_id: characterData.CharacterID,
+    // Use Supabase REST API directly instead of SDK
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+    const restApiUrl = `${supabaseUrl}/rest/v1/users?eve_character_id=eq.${characterData.CharacterID}`
+
+    // First try to update
+    const updateResponse = await fetch(restApiUrl, {
+      method: 'PATCH',
+      headers: {
+        'Authorization': `Bearer ${supabaseServiceRoleKey}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'return=minimal'
+      },
+      body: JSON.stringify({
         eve_character_name: characterData.CharacterName,
         access_token: tokens.access_token,
         refresh_token: tokens.refresh_token,
         token_expires_at: new Date(Date.now() + tokens.expires_in * 1000).toISOString()
       })
-      .select()
+    })
 
-    if (error && error.code !== '23505') {
-      // 23505 is duplicate key error - that's OK
-      console.error('Database insert error:', error)
-      return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}/login?error=database_error`)
-    }
+    console.log('Update response status:', updateResponse.status)
 
-    if (error && error.code === '23505') {
-      // User exists, update instead
-      console.log('User exists, updating instead')
-      const { error: updateError } = await supabase
-        .from('users')
-        .update({
+    if (updateResponse.status === 204 || updateResponse.status === 200) {
+      // Rows were updated
+      console.log('User updated successfully')
+    } else if (updateResponse.status === 404) {
+      // No rows found, insert new user
+      console.log('User not found, inserting new user')
+      
+      const insertResponse = await fetch(`${supabaseUrl}/rest/v1/users`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${supabaseServiceRoleKey}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'return=minimal'
+        },
+        body: JSON.stringify({
+          eve_character_id: characterData.CharacterID,
           eve_character_name: characterData.CharacterName,
           access_token: tokens.access_token,
           refresh_token: tokens.refresh_token,
           token_expires_at: new Date(Date.now() + tokens.expires_in * 1000).toISOString()
         })
-        .eq('eve_character_id', characterData.CharacterID)
+      })
 
-      if (updateError) {
-        console.error('Database update error:', updateError)
+      if (insertResponse.status !== 201) {
+        const errorText = await insertResponse.text()
+        console.error('Insert failed:', insertResponse.status, errorText)
         return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}/login?error=database_error`)
       }
+    } else {
+      const errorText = await updateResponse.text()
+      console.error('Update failed:', updateResponse.status, errorText)
+      return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}/login?error=database_error`)
     }
 
     console.log('User saved successfully:', characterData.CharacterID)
-
-    // Redirect to dashboard
     return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}/dashboard`)
 
   } catch (error) {
