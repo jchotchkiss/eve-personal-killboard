@@ -53,8 +53,8 @@ export async function POST(request: NextRequest) {
           .insert({
             killmail_id: km.killmail_id,
             killmail_hash: km.zkb.hash,
-            killmail_time: km.killmail_time || new Date().toISOString(), // Fallback to now
-            solar_system_id: km.solar_system_id,
+            killmail_time: km.killmail_time || new Date().toISOString(),
+            solar_system_id: km.solar_system_id || 30000142, // Fallback to Jita if null
             solar_system_name: km.solar_system_name || 'Unknown',
             region_id: km.region_id || null,
             region_name: km.region_name || null,
