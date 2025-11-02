@@ -5,16 +5,6 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const code = searchParams.get('code')
 
-  // Debug: Log all environment variables
-  console.log('=== ENVIRONMENT VARIABLES DEBUG ===')
-  console.log('NEXT_PUBLIC_SUPABASE_URL:', process.env.NEXT_PUBLIC_SUPABASE_URL ? 'SET' : 'MISSING')
-  console.log('NEXT_PUBLIC_SUPABASE_ANON_KEY:', process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ? 'SET' : 'MISSING')
-  console.log('SUPABASE_SERVICE_ROLE_KEY:', process.env.SUPABASE_SERVICE_ROLE_KEY ? 'SET' : 'MISSING')
-  console.log('EVE_CLIENT_ID:', process.env.EVE_CLIENT_ID ? 'SET' : 'MISSING')
-  console.log('EVE_CLIENT_SECRET:', process.env.EVE_CLIENT_SECRET ? 'SET' : 'MISSING')
-  console.log('NEXT_PUBLIC_APP_URL:', process.env.NEXT_PUBLIC_APP_URL ? 'SET' : 'MISSING')
-  console.log('=== END DEBUG ===')
-
   if (!code) {
     return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}/login?error=no_code`)
   }
@@ -24,15 +14,19 @@ export async function GET(request: NextRequest) {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
     const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
+    console.log('Supabase URL length:', supabaseUrl?.length)
+    console.log('Supabase Key length:', supabaseServiceRoleKey?.length)
+    console.log('Supabase URL starts with:', supabaseUrl?.substring(0, 20))
+    console.log('Supabase Key starts with:', supabaseServiceRoleKey?.substring(0, 20))
+
     if (!supabaseUrl || !supabaseServiceRoleKey) {
-      console.error('Missing Supabase config:', {
-        url: supabaseUrl ? 'SET' : 'MISSING',
-        key: supabaseServiceRoleKey ? 'SET' : 'MISSING'
-      })
+      console.error('Missing Supabase config')
       return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}/login?error=config_error`)
     }
 
+    console.log('Creating Supabase client...')
     const supabase = createClient(supabaseUrl, supabaseServiceRoleKey)
+    console.log('Supabase client created successfully')
 
     // Exchange code for tokens
     const tokenResponse = await fetch('https://login.eveonline.com/v2/oauth/token', {
@@ -58,7 +52,7 @@ export async function GET(request: NextRequest) {
     // Store user in database
     console.log('Attempting to upsert user:', characterData.CharacterID)
     
-    const { error } = await supabase
+    const { error, data } = await supabase
       .from('users')
       .upsert({
         eve_character_id: characterData.CharacterID,
@@ -70,12 +64,13 @@ export async function GET(request: NextRequest) {
         onConflict: 'eve_character_id'
       })
 
+    console.log('Upsert response - data:', data)
+    console.log('Upsert response - error:', error)
+
     if (error) {
-      console.error('Database error:', {
-        code: error.code,
-        message: error.message,
-        details: error.details
-      })
+      console.error('Database error - Full object:', JSON.stringify(error, null, 2))
+      console.error('Database error - Type:', typeof error)
+      console.error('Database error - Keys:', Object.keys(error))
       return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}/login?error=database_error`)
     }
 
@@ -86,6 +81,8 @@ export async function GET(request: NextRequest) {
 
   } catch (error) {
     console.error('Auth error:', error)
+    console.error('Error type:', typeof error)
+    console.error('Error keys:', Object.keys(error || {}))
     return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}/login?error=auth_failed`)
   }
 }
