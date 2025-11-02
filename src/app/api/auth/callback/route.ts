@@ -42,6 +42,8 @@ export async function GET(request: NextRequest) {
     const characterData = await verifyResponse.json()
 
     // Store user in database
+    console.log('Attempting to upsert user:', characterData.CharacterID)
+    
     const { error } = await supabase
       .from('users')
       .upsert({
@@ -55,12 +57,13 @@ export async function GET(request: NextRequest) {
       })
 
     if (error) {
-      console.error('Database error details:', {
-        code: error.code,
-        message: error.message,
-        details: error.details,
-      })
-      return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}/login?error=database_error`)
+      console.error('DATABASE ERROR - Full error object:', error)
+      console.error('DATABASE ERROR - Code:', error.code)
+      console.error('DATABASE ERROR - Message:', error.message)
+      console.error('DATABASE ERROR - Details:', error.details)
+      // TEMPORARY: Continue anyway to see if this is the issue
+      console.log('Continuing despite database error...')
+      // return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}/login?error=database_error`)
     }
 
     // Redirect to dashboard
