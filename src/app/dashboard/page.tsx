@@ -23,6 +23,8 @@ export default function Dashboard() {
       if (error) {
         console.error('Error fetching killmails:', error)
       } else {
+        console.log('Raw data from Supabase:', data)
+        console.log('First killmail:', data?.[0])
         setKillmails(data || [])
       }
       setLoading(false)
@@ -56,9 +58,9 @@ export default function Dashboard() {
               {killmails.map((km) => (
                 <tr key={km.id} className="border-b border-slate-700 hover:bg-slate-800">
                   <td className="px-4 py-2">{new Date(km.killmail_time).toLocaleString()}</td>
-                  <td className="px-4 py-2">{km.victim_character_name}</td>
-                  <td className="px-4 py-2">{km.victim_ship_name}</td>
-                  <td className="px-4 py-2">{km.solar_system_name}</td>
+                  <td className="px-4 py-2">{km.victim_character_name || 'N/A'}</td>
+                  <td className="px-4 py-2">{km.victim_ship_name || 'N/A'}</td>
+                  <td className="px-4 py-2">{km.solar_system_name || 'N/A'}</td>
                   <td className="px-4 py-2">{(km.total_value / 1000000).toFixed(2)}M ISK</td>
                 </tr>
               ))}
