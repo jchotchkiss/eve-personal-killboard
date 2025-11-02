@@ -5,6 +5,16 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const code = searchParams.get('code')
 
+  // Debug: Log all environment variables
+  console.log('=== ENVIRONMENT VARIABLES DEBUG ===')
+  console.log('NEXT_PUBLIC_SUPABASE_URL:', process.env.NEXT_PUBLIC_SUPABASE_URL ? 'SET' : 'MISSING')
+  console.log('NEXT_PUBLIC_SUPABASE_ANON_KEY:', process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ? 'SET' : 'MISSING')
+  console.log('SUPABASE_SERVICE_ROLE_KEY:', process.env.SUPABASE_SERVICE_ROLE_KEY ? 'SET' : 'MISSING')
+  console.log('EVE_CLIENT_ID:', process.env.EVE_CLIENT_ID ? 'SET' : 'MISSING')
+  console.log('EVE_CLIENT_SECRET:', process.env.EVE_CLIENT_SECRET ? 'SET' : 'MISSING')
+  console.log('NEXT_PUBLIC_APP_URL:', process.env.NEXT_PUBLIC_APP_URL ? 'SET' : 'MISSING')
+  console.log('=== END DEBUG ===')
+
   if (!code) {
     return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}/login?error=no_code`)
   }
@@ -15,6 +25,10 @@ export async function GET(request: NextRequest) {
     const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
     if (!supabaseUrl || !supabaseServiceRoleKey) {
+      console.error('Missing Supabase config:', {
+        url: supabaseUrl ? 'SET' : 'MISSING',
+        key: supabaseServiceRoleKey ? 'SET' : 'MISSING'
+      })
       return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}/login?error=config_error`)
     }
 
