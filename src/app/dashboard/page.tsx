@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@supabase/supabase-js'
 
 export default function Dashboard() {
-  const [killmails, setKillmails] = useState([])
+  const [killmails, setKillmails] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
