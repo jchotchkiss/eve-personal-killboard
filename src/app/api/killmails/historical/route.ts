@@ -16,72 +16,83 @@ export async function POST(request: NextRequest) {
     const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
     if (!supabaseUrl || !supabaseServiceRoleKey) {
-      return NextResponse.json({ error: 'Missing config' }, { status: 500 })
+      return NextResponse.json({ error: 'Missing Supabase config' }, { status: 500 })
     }
 
     const supabase = createClient(supabaseUrl, supabaseServiceRoleKey)
 
     // Fetch from ZKillboard
+    console.log(`Fetching killmails for character ${characterId}...`)
     const zkbResponse = await fetch(
-      `https://zkillboard.com/api/characterID/${characterId}/kills/`,
+      `https://zkillboard.com/api/characterID/${characterId}/`,
       {
         headers: {
-          'User-Agent': 'EVE-Personal-Killboard/1.0'
+          'User-Agent': 'EVE-Personal-Killboard/1.0 Contact:YourEmail@example.com'
         }
       }
     )
 
     if (!zkbResponse.ok) {
+      console.error(`ZKB API error: ${zkbResponse.status}`)
       return NextResponse.json(
-        { error: 'ZKB API error' },
+        { error: `ZKB API error: ${zkbResponse.status}` },
         { status: zkbResponse.status }
       )
     }
 
     const zkbKillmails = await zkbResponse.json()
+    console.log(`Received ${zkbKillmails.length} killmails from ZKillboard`)
 
     // Store in database
     let inserted = 0
     let skipped = 0
+    let errors = 0
 
     for (const km of zkbKillmails) {
       try {
+        // Get full killmail details from ESI
+        const esiResponse = await fetch(
+          `https://esi.eveonline.com/latest/killmails/${km.killmail_id}/${km.zkb.hash}/`
+        )
+
+        if (!esiResponse.ok) {
+          console.error(`ESI error for killmail ${km.killmail_id}: ${esiResponse.status}`)
+          errors++
+          continue
+        }
+
+        const fullKillmail = await esiResponse.json()
+
         const { error } = await supabase
           .from('killmails')
           .insert({
             killmail_id: km.killmail_id,
-            killmail_hash: km.killmail_hash,
-            killmail_time: new Date(km.killmail_time).toISOString(),
-            victim_character_id: km.victim.character_id || null,
-            victim_character_name: km.victim.character_name || 'Unknown',
-            victim_corporation_id: km.victim.corporation_id || null,
-            victim_ship_type_id: km.victim.ship_type_id || null,
-            victim_ship_name: km.victim.ship_name || null,
-            solar_system_id: km.solar_system_id,
-            solar_system_name: km.solar_system_name || null,
-            region_id: km.region_id || null,
-            region_name: km.region_name || null,
-            total_value: km.zkb?.totalValue || 0,
-            fitted_value: km.zkb?.fittedValue || 0,
-            destroyed_value: km.zkb?.destroyedValue || 0,
-            dropped_value: km.zkb?.droppedValue || 0,
-            attacker_count: km.attackers?.length || 0,
-            zkb_points: km.zkb?.points || 0,
-            raw_killmail: km
+            killmail_hash: km.zkb.hash,
+            killmail_time: fullKillmail.killmail_time,
+            solar_system_id: fullKillmail.solar_system_id,
+            victim_character_id: fullKillmail.victim.character_id || null,
+            victim_ship_type_id: fullKillmail.victim.ship_type_id,
+            total_value: km.zkb.totalValue || 0,
+            zkb_points: km.zkb.points || 0,
+            is_solo: km.zkb.solo || false,
+            is_awox: km.zkb.awox || false,
+            attacker_count: fullKillmail.attackers?.length || 0,
+            raw_killmail: fullKillmail
           })
-          .select()
 
         if (error) {
           if (error.code === '23505') { // Duplicate key
             skipped++
           } else {
             console.error('Insert error:', error)
+            errors++
           }
         } else {
           inserted++
         }
       } catch (error) {
         console.error('Error processing killmail:', error)
+        errors++
       }
     }
 
@@ -89,13 +100,14 @@ export async function POST(request: NextRequest) {
       success: true,
       totalKillmails: zkbKillmails.length,
       inserted,
-      skipped
+      skipped,
+      errors
     })
 
   } catch (error) {
     console.error('Historical sync error:', error)
     return NextResponse.json(
-      { error: 'Historical sync failed' },
+      { error: 'Historical sync failed', details: String(error) },
       { status: 500 }
     )
   }
