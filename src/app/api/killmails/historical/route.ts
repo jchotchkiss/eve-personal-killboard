@@ -1,6 +1,48 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
+// Cache for ship types and systems to avoid repeated API calls
+const shipTypeCache = new Map<number, string>()
+const systemCache = new Map<number, string>()
+
+async function getShipTypeName(shipTypeId: number): Promise<string> {
+  if (shipTypeCache.has(shipTypeId)) {
+    return shipTypeCache.get(shipTypeId)!
+  }
+
+  try {
+    const response = await fetch(
+      `https://esi.eveonline.com/latest/universe/types/${shipTypeId}/`
+    )
+    if (!response.ok) return 'Unknown'
+
+    const data = await response.json()
+    shipTypeCache.set(shipTypeId, data.name)
+    return data.name
+  } catch {
+    return 'Unknown'
+  }
+}
+
+async function getSystemName(systemId: number): Promise<string> {
+  if (systemCache.has(systemId)) {
+    return systemCache.get(systemId)!
+  }
+
+  try {
+    const response = await fetch(
+      `https://esi.eveonline.com/latest/universe/systems/${systemId}/`
+    )
+    if (!response.ok) return 'Unknown'
+
+    const data = await response.json()
+    systemCache.set(systemId, data.name)
+    return data.name
+  } catch {
+    return 'Unknown'
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const { characterId, characterName } = await request.json()
@@ -48,21 +90,25 @@ export async function POST(request: NextRequest) {
 
     for (const km of zkbKillmails) {
       try {
+        // Fetch ship and system names from ESI
+        const shipName = await getShipTypeName(km.victim?.ship_type_id || 0)
+        const systemName = await getSystemName(km.solar_system_id || 30000142)
+
         const { error } = await supabase
           .from('killmails')
           .insert({
             killmail_id: km.killmail_id,
             killmail_hash: km.zkb.hash,
             killmail_time: km.killmail_time || new Date().toISOString(),
-            solar_system_id: km.solar_system_id || 30000142, // Fallback to Jita if null
-            solar_system_name: km.solar_system_name || 'Unknown',
+            solar_system_id: km.solar_system_id || 30000142,
+            solar_system_name: systemName,
             region_id: km.region_id || null,
             region_name: km.region_name || null,
             victim_character_id: km.victim?.character_id || null,
             victim_character_name: km.victim?.character_name || 'Unknown',
             victim_corporation_id: km.victim?.corporation_id || null,
             victim_ship_type_id: km.victim?.ship_type_id || null,
-            victim_ship_name: km.victim?.ship_name || null,
+            victim_ship_name: shipName,
             total_value: km.zkb.totalValue || 0,
             fitted_value: km.zkb.fittedValue || 0,
             destroyed_value: km.zkb.destroyedValue || 0,
