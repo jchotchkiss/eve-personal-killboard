@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
     // Use Supabase RPC with correct headers
     const upsertUrl = `${supabaseUrl}/rest/v1/rpc/upsert_user`
 
-        const upsertResponse = await fetch(upsertUrl, {
+    const upsertResponse = await fetch(upsertUrl, {
       method: 'POST',
       headers: {
         'apikey': supabaseServiceRoleKey || '',
@@ -61,9 +61,15 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}/login?error=database_error`)
     }
 
-    const upsertData = await upsertResponse.json()
-    console.log('Upsert successful')
+    // Don't parse JSON for VOID responses (status 204)
+    if (upsertResponse.status === 204) {
+      console.log('Upsert successful (VOID response)')
+    } else {
+      const upsertData = await upsertResponse.json()
+      console.log('Upsert successful:', upsertData)
+    }
 
+    console.log('Redirecting to dashboard')
     return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}/dashboard`)
 
   } catch (error) {
