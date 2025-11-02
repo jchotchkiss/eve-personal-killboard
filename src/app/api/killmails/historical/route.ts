@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
-// Cache for ship types and systems to avoid repeated API calls
 const shipTypeCache = new Map<number, string>()
 const systemCache = new Map<number, string>()
 
-async function getShipTypeName(shipTypeId: number): Promise<string> {
+async function getShipTypeName(shipTypeId: number | null): Promise<string> {
+  if (!shipTypeId) return 'Unknown'
   if (shipTypeCache.has(shipTypeId)) {
     return shipTypeCache.get(shipTypeId)!
   }
@@ -14,17 +14,22 @@ async function getShipTypeName(shipTypeId: number): Promise<string> {
     const response = await fetch(
       `https://esi.eveonline.com/latest/universe/types/${shipTypeId}/`
     )
-    if (!response.ok) return 'Unknown'
+    if (!response.ok) {
+      console.error(`ESI ship lookup failed: ${response.status}`)
+      return 'Unknown'
+    }
 
     const data = await response.json()
     shipTypeCache.set(shipTypeId, data.name)
     return data.name
-  } catch {
+  } catch (error) {
+    console.error(`Error fetching ship type ${shipTypeId}:`, error)
     return 'Unknown'
   }
 }
 
-async function getSystemName(systemId: number): Promise<string> {
+async function getSystemName(systemId: number | null): Promise<string> {
+  if (!systemId) return 'Unknown'
   if (systemCache.has(systemId)) {
     return systemCache.get(systemId)!
   }
@@ -33,12 +38,16 @@ async function getSystemName(systemId: number): Promise<string> {
     const response = await fetch(
       `https://esi.eveonline.com/latest/universe/systems/${systemId}/`
     )
-    if (!response.ok) return 'Unknown'
+    if (!response.ok) {
+      console.error(`ESI system lookup failed: ${response.status}`)
+      return 'Unknown'
+    }
 
     const data = await response.json()
     systemCache.set(systemId, data.name)
     return data.name
-  } catch {
+  } catch (error) {
+    console.error(`Error fetching system ${systemId}:`, error)
     return 'Unknown'
   }
 }
@@ -91,8 +100,10 @@ export async function POST(request: NextRequest) {
     for (const km of zkbKillmails) {
       try {
         // Fetch ship and system names from ESI
-        const shipName = await getShipTypeName(km.victim?.ship_type_id || 0)
-        const systemName = await getSystemName(km.solar_system_id || 30000142)
+        const shipName = await getShipTypeName(km.victim?.ship_type_id)
+        const systemName = await getSystemName(km.solar_system_id)
+
+        console.log(`Processing killmail ${km.killmail_id}: ship=${shipName}, system=${systemName}`)
 
         const { error } = await supabase
           .from('killmails')
